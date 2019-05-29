@@ -28,6 +28,7 @@ class PluginEntryPoint(object):
         "certbot-dns-cloudxns",
         "certbot-dns-digitalocean",
         "certbot-dns-dnsimple",
+        "certbot-dns-checkdomain",
         "certbot-dns-dnsmadeeasy",
         "certbot-dns-gehirn",
         "certbot-dns-google",

@@ -1451,6 +1451,10 @@ def _plugins_parsing(helpful, plugins):
                 default=flag_default("dns_dnsimple"),
                 help=("Obtain certificates using a DNS TXT record (if you are "
                       "using DNSimple for DNS)."))
+    helpful.add(["plugins", "certonly"], "--dns-checkdomain", action="store_true",
+                default=flag_default("dns_checkdomain"),
+                help=("Obtain certificates using a DNS TXT record (if you are "
+                      "using CheckDomain for DNS)."))
     helpful.add(["plugins", "certonly"], "--dns-dnsmadeeasy", action="store_true",
                 default=flag_default("dns_dnsmadeeasy"),
                 help=("Obtain certificates using a DNS TXT record (if you are"

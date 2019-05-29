@@ -9,7 +9,7 @@ DEFAULT_PACKAGES = [
     'certbot_dns_digitalocean', 'certbot_dns_dnsimple', 'certbot_dns_dnsmadeeasy',
     'certbot_dns_gehirn', 'certbot_dns_google', 'certbot_dns_linode', 'certbot_dns_luadns',
     'certbot_dns_nsone', 'certbot_dns_ovh', 'certbot_dns_rfc2136', 'certbot_dns_route53',
-    'certbot_dns_sakuracloud', 'certbot_nginx', 'certbot_postfix', 'letshelp_certbot']
+    'certbot_dns_sakuracloud', 'certbot_nginx', 'certbot_postfix', 'letshelp_certbot', 'certbot_dns_checkdomain']
 
 COVER_THRESHOLDS = {
     'certbot': {'linux': 98, 'windows': 93},
@@ -19,6 +19,7 @@ COVER_THRESHOLDS = {
     'certbot_dns_cloudxns': {'linux': 99, 'windows': 99},
     'certbot_dns_digitalocean': {'linux': 98, 'windows': 98},
     'certbot_dns_dnsimple': {'linux': 98, 'windows': 98},
+    'certbot_dns_checkdomain': {'linux': 98, 'windows': 98},
     'certbot_dns_dnsmadeeasy': {'linux': 99, 'windows': 99},
     'certbot_dns_gehirn': {'linux': 97, 'windows': 97},
     'certbot_dns_google': {'linux': 99, 'windows': 99},

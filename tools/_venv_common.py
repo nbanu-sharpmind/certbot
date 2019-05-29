@@ -28,6 +28,7 @@ REQUIREMENTS = [
     '-e certbot-dns-cloudxns',
     '-e certbot-dns-digitalocean',
     '-e certbot-dns-dnsimple',
+    '-e certbot-dns-checkdomain',
     '-e certbot-dns-dnsmadeeasy',
     '-e certbot-dns-gehirn',
     '-e certbot-dns-google',
