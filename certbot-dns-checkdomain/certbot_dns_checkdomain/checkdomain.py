@@ -34,11 +34,15 @@ class Provider(BaseProvider):
         self.api_endpoint = self._get_provider_option(
             'api_endpoint') or 'https://api.checkdomain.de/v1'
 
+        LOGGER.debug('check-domain module initialized....')
 
 
     def _authenticate(self):
-       self._get('/domains/{0}'.format(self.domain))
-       self.domain_id = self.domain
+        domain_result = self._get('/domains')
+        LOGGER.debug(domain_result)
+        #self._get('/domains/'.format(self.domain))
+
+        #self.domain_id = self.domain
 
 
 
@@ -189,6 +193,9 @@ class Provider(BaseProvider):
                                     data=json.dumps(data),
                                     headers=default_headers,
                                     auth=default_auth)
+
+        self.PrintRequest(response)
+
         # if the request fails for any reason, throw an error.
         response.raise_for_status()
         if response.text and response.json()['data'] is None:
@@ -198,3 +205,16 @@ class Provider(BaseProvider):
 
     def _patch(self, url='/', data=None, query_params=None):
         return self._request('PATCH', url, data=data, query_params=query_params)
+
+
+
+    def PrintRequest(request, print_text=False):
+
+        """Print request details
+           * request:    request object to examine
+           * print_text: Print text content of request result"""
+
+
+        print('--- Status code ---')
+        print(request.status_code)
+

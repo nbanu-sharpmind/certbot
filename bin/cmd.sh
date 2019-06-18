@@ -1,0 +1,1 @@
+../venv/bin/certbot certonly --dry-run  --verbose --debug --config-dir /tmp  --work-dir /tmp --logs-dir /tmp  --dns-checkdomain --dns-checkdomain-credentials /u/nbanu/git/github/certbot/certbot-dns-checkdomain/certbot_dns_checkdomain/authorization_key.ini -d passta.de
