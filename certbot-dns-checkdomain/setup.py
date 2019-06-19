@@ -11,6 +11,7 @@ install_requires = [
     'acme>=0.31.0',
     'certbot>=0.34.0',
     'mock',
+    'pprint',
     'setuptools',
     'zope.interface',
 ]

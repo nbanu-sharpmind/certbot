@@ -4,30 +4,31 @@ import json
 import logging
 
 import requests
-from lexicon.providers.base import Provider as BaseProvider
+import pprint
 
+from lexicon.providers.base import Provider as BaseProvider
 
 LOGGER = logging.getLogger(__name__)
 
 NAMESERVER_DOMAINS = ['checkdomain.de']
-
 
 def provider_parser(subparser):
     """Configure provider parser for Checkdomain"""
     subparser.add_argument(
         "--auth-token", help="specify api token for authentication")
 
-    #subparser.add_argument(
+    # subparser.add_argument(
     #    "--auth-username", help="specify email address for authentication")
-    #subparser.add_argument(
+    # subparser.add_argument(
     #    "--auth-password", help="specify password for authentication")
-    #subparser.add_argument(
+    # subparser.add_argument(
     #    "--auth-2fa",
     #    help="specify two-factor auth token (OTP) to use with email/password authentication")
 
 
 class Provider(BaseProvider):
     """Provider class for Checkdomain"""
+
     def __init__(self, config):
         super(Provider, self).__init__(config)
         self.domain_id = None
@@ -36,18 +37,29 @@ class Provider(BaseProvider):
 
         LOGGER.debug('check-domain module initialized....')
 
-
     def _authenticate(self):
-        domain_result = self._get('/domains')
-        LOGGER.debug(domain_result)
-        #self._get('/domains/'.format(self.domain))
+        LOGGER.debug('IN: _authenticate')
 
-        #self.domain_id = self.domain
+        json_result = self._get('/domains?limit=100')
 
+        # find our domain
+        all_domains = json_result['_embedded']['domains']
 
+        domains_found = [x for x in all_domains if x['name'] == self.domain]
+
+        # pprint.pprint(domains_found)
+
+        if (len(domains_found) > 0):
+            self.domain_id = domains_found[0]['id']
+            print("Found domain id %d for domain name %s" % (self.domain_id, self.domain))
+        else:
+            print("Nothing found")
+            raise Exception('Domain not found')
 
     # Create record. If record already exists with the same content, do nothing
     def _create_record(self, rtype, name, content):
+        LOGGER.debug('IN: _create_record')
+
         # check if record already exists
         existing_records = self._list_records(rtype, name, content)
         if len(existing_records) == 1:
@@ -75,6 +87,8 @@ class Provider(BaseProvider):
     # type, name and content are used to filter records.
     # If possible filter during the query, otherwise filter after response is received.
     def _list_records(self, rtype=None, name=None, content=None):
+        LOGGER.debug('IN: _list_records')
+
         url = '/domains/{0}/nameserver/records'.format(self.domain_id)
         records = []
         payload = {}
@@ -110,11 +124,6 @@ class Provider(BaseProvider):
 
         LOGGER.debug('list_records: %s', records)
         return records
-
-
-
-
-
 
     # Create or update a record.
     def _update_record(self, identifier, rtype=None, name=None, content=None):
@@ -175,7 +184,8 @@ class Provider(BaseProvider):
             query_params = {}
         default_headers = {
             'Accept': 'application/json',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'User-Agent': 'dddcurl / 7.61.0'
         }
         default_auth = None
 
@@ -194,27 +204,48 @@ class Provider(BaseProvider):
                                     headers=default_headers,
                                     auth=default_auth)
 
-        self.PrintRequest(response)
+        # for debugging
+        self.PrintRequest(response, True)
 
         # if the request fails for any reason, throw an error.
         response.raise_for_status()
-        if response.text and response.json()['data'] is None:
+        LOGGER.debug("Check if we got data")
+
+        if response.text is None:
             raise Exception('No data returned')
 
-        return response.json()['data'] if response.text else None
+        # return the received body as json
+        return response.json() if response.text else None
 
     def _patch(self, url='/', data=None, query_params=None):
         return self._request('PATCH', url, data=data, query_params=query_params)
 
-
-
-    def PrintRequest(request, print_text=False):
-
+    def PrintRequest(provider, response, print_text=False):
         """Print request details
            * request:    request object to examine
            * print_text: Print text content of request result"""
 
+        print('--- URL ---')
+        pprint.pprint(response.request.url)
 
         print('--- Status code ---')
-        print(request.status_code)
+        pprint.pprint(response.status_code)
 
+        print('--- Request Headers ---')
+        pprint.pprint(response.request.headers)
+
+        print('--- Response Headers ---')
+        pprint.pprint(response.headers)
+
+        #        print('--- Cookies ---')
+        #        pprint.pprint(response.request.cookies)
+
+        if print_text:
+            print('--- Content ---')
+            pprint.pprint(response.text)
+
+            print('--- JSON ---')
+            pprint.pprint(response.json())
+
+        print('--- History ---')
+        pprint.pprint(response.history)
