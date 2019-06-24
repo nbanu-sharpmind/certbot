@@ -62,23 +62,38 @@ class Provider(BaseProvider):
 
         # check if record already exists
         existing_records = self._list_records(rtype, name, content)
+        LOGGER.debug('in _create_record---> existing record:%d' % len(existing_records))
+
         if len(existing_records) == 1:
             return True
+
+        # record = {
+        #     'type': rtype,
+        #     'name': self._relative_name(name),
+        #     'content': content
+        # }
 
         record = {
             'type': rtype,
             'name': self._relative_name(name),
-            'content': content
+            'value': content
         }
-        if self._get_lexicon_option('ttl'):
-            record['ttl'] = self._get_lexicon_option('ttl')
-        if self._get_lexicon_option('priority'):
-            record['priority'] = self._get_lexicon_option('priority')
-        if self._get_provider_option('regions'):
-            record['regions'] = self._get_provider_option('regions')
+
+        # if self._get_lexicon_option('ttl'):
+        #     record['ttl'] = self._get_lexicon_option('ttl')
+        # if self._get_lexicon_option('priority'):
+        #     record['priority'] = self._get_lexicon_option('priority')
+        # if self._get_provider_option('regions'):
+        #     record['regions'] = self._get_provider_option('regions')
+
+        record['ttl'] = 90
+        record['priority'] = 0
+
+        # payload = self._post(
+        #     '/{0}/zones/{1}/records'.format(self.account_id, self.domain), record)
 
         payload = self._post(
-            '/{0}/zones/{1}/records'.format(self.account_id, self.domain), record)
+            '/domains/{0}/nameservers/records'.format(self.domain_id), record)
 
         LOGGER.debug('create_record: %s', 'id' in payload)
         return 'id' in payload
@@ -87,31 +102,46 @@ class Provider(BaseProvider):
     # type, name and content are used to filter records.
     # If possible filter during the query, otherwise filter after response is received.
     def _list_records(self, rtype=None, name=None, content=None):
-        LOGGER.debug('IN: _list_records')
+        LOGGER.debug('IN: _list_records ---> rtype=%s, name=%s, content=%s' % (rtype,name, content) )
 
-        url = '/domains/{0}/nameserver/records'.format(self.domain_id)
+        #url = '/domains/{0}/nameservers/records?limit=100'.format(self.domain_id)
+        url = '/domains/{0}/nameservers/records?limit=100'.format(self.domain_id)
+
         records = []
         payload = {}
 
         next_url = url
         while next_url is not None:
+
             payload = self._get(next_url)
+
             if '_links' in payload \
                     and 'pages' in payload['_links'] \
                     and 'next' in payload['_links']['pages']:
                 next_url = payload['_links']['pages']['next']
+
             else:
                 next_url = None
 
-            for record in payload['domain_records']:
-                processed_record = {
-                    'type': record['type'],
-                    'name': "{0}.{1}".format(record['name'], self.domain_id),
-                    'ttl': '',
-                    'content': record['data'],
-                    'id': record['id']
-                }
-                records.append(processed_record)
+            LOGGER.debug('888888888, next_url=%s' % (next_url) )
+
+            #for record in payload['domain_records']:
+            for record in payload['_embedded']['records']:
+
+                if '_links' in record:
+
+                    href = record['_links']['self']['href']
+
+                    link_id = href.split("/")[-1]
+
+                    processed_record = {
+                        'type': record['type'],
+                        'name': "{0}.{1}".format(record['name'], self.domain_id),
+                        'ttl': '',
+                        'content': record['value'],
+                        'id': link_id
+                    }
+                    records.append(processed_record)
 
         if rtype:
             records = [record for record in records if record['type'] == rtype]
@@ -120,13 +150,15 @@ class Provider(BaseProvider):
                        == self._full_name(name)]
         if content:
             records = [
-                record for record in records if record['content'].lower() == content.lower()]
+                record for record in records if record['value'].lower() == content.lower()]
 
-        LOGGER.debug('list_records: %s', records)
+        LOGGER.debug('in _list_records--->number of records with href and desired name and type: %s' % (records))
         return records
 
     # Create or update a record.
     def _update_record(self, identifier, rtype=None, name=None, content=None):
+
+        LOGGER.debug('in UPDATE.., identifier=%s, rtype=%s, name=%s, content=%s' % (identifier, rtype,name, content) )
 
         data = {}
 
@@ -142,10 +174,13 @@ class Provider(BaseProvider):
             data['content'] = content
         if self._get_lexicon_option('ttl'):
             data['ttl'] = self._get_lexicon_option('ttl')
-        if self._get_lexicon_option('priority'):
-            data['priority'] = self._get_lexicon_option('priority')
-        if self._get_provider_option('regions'):
-            data['regions'] = self._get_provider_option('regions')
+
+        # if self._get_lexicon_option('priority'):
+        #     data['priority'] = self._get_lexicon_option('priority')
+        # if self._get_provider_option('regions'):
+        #     data['regions'] = self._get_provider_option('regions')
+
+        data['priority'] = 0
 
         for one_identifier in identifiers:
             self._patch('/{0}/zones/{1}/records/{2}'
@@ -158,21 +193,8 @@ class Provider(BaseProvider):
     # Delete an existing record.
     # If record does not exist, do nothing.
     def _delete_record(self, identifier=None, rtype=None, name=None, content=None):
-        delete_record_id = []
-        if not identifier:
-            records = self._list_records(rtype, name, content)
-            delete_record_id = [record['id'] for record in records]
-        else:
-            delete_record_id.append(identifier)
+        LOGGER.debug('in delete identifier=%s, rtype=%s, name=%s, content=%s' % (identifier, rtype,name, content) )
 
-        LOGGER.debug('delete_records: %s', delete_record_id)
-
-        for record_id in delete_record_id:
-            self._delete(
-                '/{0}/zones/{1}/records/{2}'.format(self.account_id, self.domain, record_id))
-
-        # is always True at this point; if a non 2xx response is returned, an error is raised.
-        LOGGER.debug('delete_record: True')
         return True
 
     # Helpers
@@ -219,6 +241,10 @@ class Provider(BaseProvider):
 
     def _patch(self, url='/', data=None, query_params=None):
         return self._request('PATCH', url, data=data, query_params=query_params)
+
+
+    def _post(self, url='/', data=None, query_params=None):
+        return self._request('POST', url, data=data, query_params=query_params)
 
     def PrintRequest(provider, response, print_text=False):
         """Print request details
