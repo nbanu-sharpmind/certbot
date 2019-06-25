@@ -185,7 +185,7 @@ class Provider(BaseProvider):
 
     # Delete an existing record.
     # If record does not exist, do nothing.
-    # for checkDomain . we can't delete rec
+    # for checkDomain, we can't delete rec so return true
     def _delete_record(self, identifier=None, rtype=None, name=None, content=None):
         LOGGER.debug('in delete identifier=%s, rtype=%s, name=%s, content=%s' % (identifier, rtype,name, content) )
 
