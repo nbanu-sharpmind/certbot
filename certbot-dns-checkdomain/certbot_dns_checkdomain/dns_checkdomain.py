@@ -26,7 +26,7 @@ class Authenticator(dns_common.DNSAuthenticator):
     """
 
     description = 'Obtain certificates using a DNS TXT record (if you are using CheckDomain for DNS).'
-    ttl = 60
+    ttl = 3600
 
     def __init__(self, *args, **kwargs):
         super(Authenticator, self).__init__(*args, **kwargs)

@@ -33,21 +33,39 @@ class Provider(BaseProvider):
         super(Provider, self).__init__(config)
         self.domain_id = None
         self.api_endpoint = self._get_provider_option(
-            'api_endpoint') or 'https://api.checkdomain.de/v1'
+            'api_endpoint') or 'https://api.checkdomain.de'
 
         LOGGER.debug('check-domain module initialized....')
+
+
 
     def _authenticate(self):
         LOGGER.debug('IN: _authenticate')
 
-        json_result = self._get('/domains?limit=100')
+        url = '/v1/domains?limit=100'
+        next_url = url
 
-        # find our domain
-        all_domains = json_result['_embedded']['domains']
+        domains_found = []
+        json_result = {}
 
-        domains_found = [x for x in all_domains if x['name'] == self.domain]
+        while next_url is not None:
+            LOGGER.debug("in authenticate: Next-url %s" % ( next_url))
 
-        # pprint.pprint(domains_found)
+            response = self._get(next_url)
+            json_result = response.json()
+
+            if '_links' in json_result and 'next' in json_result['_links'] \
+                    and 'href' in json_result['_links']['next']:
+                next_url = json_result['_links']['next']['href']
+            else:
+                next_url = None
+
+            # find our domain
+            all_domains = json_result['_embedded']['domains']
+            domains_found = [x for x in all_domains if x['name'] == self.domain]
+
+            if (len(domains_found) > 0):
+                break
 
         if (len(domains_found) > 0):
             self.domain_id = domains_found[0]['id']
@@ -55,6 +73,10 @@ class Provider(BaseProvider):
         else:
             print("Nothing found")
             raise Exception('Domain not found')
+
+
+
+
 
     # Create record. If record already exists with the same content, do nothing
     def _create_record(self, rtype, name, content):
@@ -73,20 +95,21 @@ class Provider(BaseProvider):
             'value': content
         }
 
-        # if self._get_lexicon_option('ttl'):
-        #     record['ttl'] = self._get_lexicon_option('ttl')
-        # if self._get_lexicon_option('priority'):
-        #     record['priority'] = self._get_lexicon_option('priority')
-        # if self._get_provider_option('regions'):
-        #     record['regions'] = self._get_provider_option('regions')
-
         record['ttl'] = 3600
         record['priority'] = 0
 
-        payload = self._post('/domains/{0}/nameservers/records'.format(self.domain_id), record)
+        response = self._post('/v1/domains/{0}/nameservers/records'.format(self.domain_id), record)
+        # note: for post we get headers and no body
+        location = response.headers['location']
 
-        LOGGER.debug('create_record: %s', 'id' in payload)
-        return 'id' in payload
+        LOGGER.debug('in create_record: location=%s', location)
+
+        idFromResponseLocationHeader = location.split("/")[-1]
+
+        LOGGER.debug('in create_record: id in loaction = %s',  idFromResponseLocationHeader)
+        return idFromResponseLocationHeader
+
+
 
     # List all records. Return an empty list if no records found
     # type, name and content are used to filter records.
@@ -94,8 +117,7 @@ class Provider(BaseProvider):
     def _list_records(self, rtype=None, name=None, content=None):
         LOGGER.debug('in: _list_records ---> rtype=%s, name=%s, content=%s' % (rtype,name, content) )
 
-        #url = '/domains/{0}/nameservers/records?limit=100'.format(self.domain_id)
-        url = '/domains/{0}/nameservers/records?limit=100'.format(self.domain_id)
+        url = '/v1/domains/{0}/nameservers/records?limit=100'.format(self.domain_id)
 
         records = []
         payload = {}
@@ -103,19 +125,24 @@ class Provider(BaseProvider):
         next_url = url
         while next_url is not None:
 
-            payload = self._get(next_url)
+            response = self._get(next_url)
+            payload = response.json()
+
+            # if '_links' in payload \
+            #         and 'pages' in payload['_links'] \
+            #         and 'next' in payload['_links']['pages']:
+            #     next_url = payload['_links']['pages']['next']
 
             if '_links' in payload \
-                    and 'pages' in payload['_links'] \
-                    and 'next' in payload['_links']['pages']:
-                next_url = payload['_links']['pages']['next']
+                    and 'next' in payload['_links'] \
+                    and 'href' in payload['_links']['next']:
+                next_url = payload['_links']['next']['href']
 
             else:
                 next_url = None
 
             LOGGER.debug('in _list_records, next_url=%s' % (next_url) )
 
-            #for record in payload['domain_records']:
             for record in payload['_embedded']['records']:
 
                 if '_links' in record:
@@ -145,6 +172,8 @@ class Provider(BaseProvider):
         LOGGER.debug('in _list_records--->number of records with href and desired name and type: %s' % (records))
         return records
 
+
+
     # Create or update a record.
     def _update_record(self, identifier, rtype=None, name=None, content=None):
 
@@ -165,34 +194,32 @@ class Provider(BaseProvider):
 
         if self._get_lexicon_option('ttl'):
             data['ttl'] = self._get_lexicon_option('ttl')
-        # if self._get_lexicon_option('priority'):
-        #     data['priority'] = self._get_lexicon_option('priority')
-        # if self._get_provider_option('regions'):
-        #     data['regions'] = self._get_provider_option('regions')
 
         data['ttl'] = 3600
         data['priority'] = 0
 
         #https://api.checkdomain.de/v1/domains/{domain}/nameservers/records/{record}
-        #payload = self._post('/domains/{0}/nameservers/records'.format(self.domain_id), record)
         for one_identifier in identifiers:
-            self._put('/domains/{0}/nameservers/records/{1}'
-                        .format(self.domain_id, one_identifier), data)
+            response = self._put('/v1/domains/{0}/nameservers/records/{1}' .format(self.domain_id, one_identifier), data)
+            one_identifier = response.json()
             LOGGER.debug('update_record: %s', one_identifier)
 
         LOGGER.debug('update_record: %s', True)
         return True
 
+
+
     # Delete an existing record.
     # If record does not exist, do nothing.
     # for checkDomain, we can't delete rec so return true
     def _delete_record(self, identifier=None, rtype=None, name=None, content=None):
-        LOGGER.debug('in delete identifier=%s, rtype=%s, name=%s, content=%s' % (identifier, rtype,name, content) )
-
+        #LOGGER.debug('in delete identifier=%s, rtype=%s, name=%s, content=%s' % (identifier, rtype,name, content) )
         return True
 
-    # Helpers
 
+
+
+    # Helpers
     def _request(self, action='GET', url='/', data=None, query_params=None):
         if data is None:
             data = {}
@@ -231,14 +258,22 @@ class Provider(BaseProvider):
             raise Exception('No data returned')
 
         # return the received body as json
-        return response.json() if response.text else None
+        # return response.json() if response.text else None
+
+        # return the response
+        return response
+
+
 
     def _put(self, url='/', data=None, query_params=None):
         return self._request('PUT', url, data=data, query_params=query_params)
 
 
+
     def _post(self, url='/', data=None, query_params=None):
         return self._request('POST', url, data=data, query_params=query_params)
+
+
 
     def PrintRequest(provider, response, print_text=False):
         """Print request details
@@ -264,8 +299,9 @@ class Provider(BaseProvider):
             print('--- Content ---')
             pprint.pprint(response.text)
 
-            print('--- JSON ---')
-            #pprint.pprint(response.json())
+            # if response.text is not None:
+            #     print('--- JSON ---')
+            #     pprint.pprint(response.json())
 
-        print('--- History ---')
+        print('--- response History ---')
         pprint.pprint(response.history)
