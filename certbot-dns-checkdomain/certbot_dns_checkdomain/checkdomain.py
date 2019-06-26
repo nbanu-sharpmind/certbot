@@ -299,9 +299,11 @@ class Provider(BaseProvider):
             print('--- Content ---')
             pprint.pprint(response.text)
 
-            # if response.text is not None:
-            #     print('--- JSON ---')
-            #     pprint.pprint(response.json())
+            try:
+                print('--- JSON ---')
+                pprint.pprint(response.json())
+            except:
+                print("Something went wrong printing response.json()")
 
         print('--- response History ---')
         pprint.pprint(response.history)
