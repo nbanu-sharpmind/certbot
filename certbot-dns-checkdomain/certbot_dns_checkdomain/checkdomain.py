@@ -5,12 +5,14 @@ import logging
 
 import requests
 import pprint
+from certbot.plugins import dns_common
 
 from lexicon.providers.base import Provider as BaseProvider
 
 LOGGER = logging.getLogger(__name__)
 
 NAMESERVER_DOMAINS = ['checkdomain.de']
+
 
 def provider_parser(subparser):
     """Configure provider parser for Checkdomain"""
@@ -37,8 +39,6 @@ class Provider(BaseProvider):
 
         LOGGER.debug('check-domain module initialized....')
 
-
-
     def _authenticate(self):
         LOGGER.debug('IN: _authenticate')
 
@@ -46,10 +46,9 @@ class Provider(BaseProvider):
         next_url = url
 
         domains_found = []
-        json_result = {}
 
         while next_url is not None:
-            LOGGER.debug("in authenticate: Next-url %s" % ( next_url))
+            LOGGER.debug("in authenticate: Next-url %s" % (next_url))
 
             response = self._get(next_url)
             json_result = response.json()
@@ -61,30 +60,40 @@ class Provider(BaseProvider):
                 next_url = None
 
             # find our domain
+
+            # all domain at checkdomain
             all_domains = json_result['_embedded']['domains']
-            domains_found = [x for x in all_domains if x['name'] == self.domain]
+
+            # all possible domain names
+            domain_name_guesses = dns_common.base_domain_name_guesses(self.domain)
+
+            for guess in domain_name_guesses:
+                LOGGER.debug("trying: %s" % guess)
+                domains_found = [x for x in all_domains if x['name'] == guess]
+
+                if (len(domains_found) > 0):
+                    break
 
             if (len(domains_found) > 0):
                 break
 
         if (len(domains_found) > 0):
             self.domain_id = domains_found[0]['id']
+            self.domain = domains_found[0]['name']
             print("Found domain id %d for domain name %s" % (self.domain_id, self.domain))
         else:
             print("Nothing found")
             raise Exception('Domain not found')
 
-
-
-
-
     # Create record. If record already exists with the same content, do nothing
     def _create_record(self, rtype, name, content):
         LOGGER.debug('IN: _create_record')
 
+        LOGGER.debug('in CREATE..,  rtype=%s, name=%s, content=%s' % ( rtype, name, content))
+
         # check if record already exists
         existing_records = self._list_records(rtype, name, content)
-        LOGGER.debug('in _create_record---> existing record:%d' % len(existing_records))
+        # LOGGER.debug('in _create_record---> existing record:%d' % len(existing_records))
 
         if len(existing_records) == 1:
             return True
@@ -98,6 +107,9 @@ class Provider(BaseProvider):
         record['ttl'] = 3600
         record['priority'] = 0
 
+        LOGGER.debug('IN: _create_record  -- name=%s' % self._relative_name(name))
+
+        LOGGER.debug('IN: _create_record  -- domain_id =%s' % self.domain_id)
         response = self._post('/v1/domains/{0}/nameservers/records'.format(self.domain_id), record)
         # note: for post we get headers and no body
         location = response.headers['location']
@@ -106,16 +118,14 @@ class Provider(BaseProvider):
 
         idFromResponseLocationHeader = location.split("/")[-1]
 
-        LOGGER.debug('in create_record: id in loaction = %s',  idFromResponseLocationHeader)
+        LOGGER.debug('in create_record: id in loaction = %s', idFromResponseLocationHeader)
         return idFromResponseLocationHeader
-
-
 
     # List all records. Return an empty list if no records found
     # type, name and content are used to filter records.
     # If possible filter during the query, otherwise filter after response is received.
     def _list_records(self, rtype=None, name=None, content=None):
-        LOGGER.debug('in: _list_records ---> rtype=%s, name=%s, content=%s' % (rtype,name, content) )
+        LOGGER.debug('in: _list_records ---> rtype=%s, name=%s, content=%s' % (rtype, name, content))
 
         url = '/v1/domains/{0}/nameservers/records?limit=100'.format(self.domain_id)
 
@@ -141,12 +151,11 @@ class Provider(BaseProvider):
             else:
                 next_url = None
 
-            LOGGER.debug('in _list_records, next_url=%s' % (next_url) )
+            LOGGER.debug('in _list_records, next_url=%s' % (next_url))
 
             for record in payload['_embedded']['records']:
 
                 if '_links' in record:
-
                     href = record['_links']['self']['href']
 
                     link_id = href.split("/")[-1]
@@ -172,12 +181,10 @@ class Provider(BaseProvider):
         LOGGER.debug('in _list_records--->number of records with href and desired name and type: %s' % (records))
         return records
 
-
-
     # Create or update a record.
     def _update_record(self, identifier, rtype=None, name=None, content=None):
 
-        LOGGER.debug('in UPDATE.., identifier=%s, rtype=%s, name=%s, content=%s' % (identifier, rtype,name, content) )
+        LOGGER.debug('in UPDATE.., identifier=%s, rtype=%s, name=%s, content=%s' % (identifier, rtype, name, content))
 
         data = {}
 
@@ -198,26 +205,21 @@ class Provider(BaseProvider):
         data['ttl'] = 3600
         data['priority'] = 0
 
-        #https://api.checkdomain.de/v1/domains/{domain}/nameservers/records/{record}
+        # https://api.checkdomain.de/v1/domains/{domain}/nameservers/records/{record}
         for one_identifier in identifiers:
-            response = self._put('/v1/domains/{0}/nameservers/records/{1}' .format(self.domain_id, one_identifier), data)
+            response = self._put('/v1/domains/{0}/nameservers/records/{1}'.format(self.domain_id, one_identifier), data)
             one_identifier = response.json()
             LOGGER.debug('update_record: %s', one_identifier)
 
         LOGGER.debug('update_record: %s', True)
         return True
 
-
-
     # Delete an existing record.
     # If record does not exist, do nothing.
     # for checkDomain, we can't delete rec so return true
     def _delete_record(self, identifier=None, rtype=None, name=None, content=None):
-        #LOGGER.debug('in delete identifier=%s, rtype=%s, name=%s, content=%s' % (identifier, rtype,name, content) )
+        # LOGGER.debug('in delete identifier=%s, rtype=%s, name=%s, content=%s' % (identifier, rtype,name, content) )
         return True
-
-
-
 
     # Helpers
     def _request(self, action='GET', url='/', data=None, query_params=None):
@@ -263,17 +265,11 @@ class Provider(BaseProvider):
         # return the response
         return response
 
-
-
     def _put(self, url='/', data=None, query_params=None):
         return self._request('PUT', url, data=data, query_params=query_params)
 
-
-
     def _post(self, url='/', data=None, query_params=None):
         return self._request('POST', url, data=data, query_params=query_params)
-
-
 
     def PrintRequest(provider, response, print_text=False):
         """Print request details
